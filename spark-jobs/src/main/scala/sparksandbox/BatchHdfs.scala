@@ -1,50 +1,45 @@
 package sparksandbox
 
-import org.apache.spark.streaming._
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.rdd.RDD
+import sparksandbox.configure.JobConfigure
 
+import scala.util.Try
 
 object BatchHdfs {
-  val KAFKA_BROKERS = "cluster-kafka:9092"
-  val HDFS_NAMENODE = "cluster-hdfs-namenode:8020"
-  val SPARK_MASTER = "spark://cluster-spark-master:7077"
-  //val SPARK_MASTER = "yarn://cluster-hdfs-resourcemanager"
-
-  val inputFile = "hdfs://" + HDFS_NAMENODE + "/All_Geographies.data"
 
   def main(args: Array[String]) {
-    // Should be some file on your system
-    val conf = new SparkConf()
-      .setAppName("Simple Application")
-      .setMaster(SPARK_MASTER)
-      .setJars(List("target/spark-sandbox-1.0-SNAPSHOT.jar").toArray)
+    val sc = JobConfigure.BatchContextHdfs(this)
+    val hdfsNamenode = JobConfigure.getNamenode(sc)
 
-    val sc = new SparkContext(conf)
-
-    sc.setLogLevel("WARN")
-
-    sc.hadoopConfiguration.set("fs.hdfs.impl", classOf[org.apache.hadoop.hdfs.DistributedFileSystem].getName)
-    sc.hadoopConfiguration.set("fs.file.impl", classOf[org.apache.hadoop.fs.LocalFileSystem].getName)
-
-    println(inputFile)
+    val inputFile = "hdfs://" + hdfsNamenode + "/CO2_vans_v9.csv"
 
     val data = sc.textFile(inputFile)
+                  .filter(line => line.trim.length > 0)
+                  .cache
 
-    println("\n\nCount: " + data.count)
+    println("\n\nCount All: " + data.count)
 
     println("\n\ntake 10: ")
     data.take(10).foreach(println)
 
-    val stateStats = data.map(line => line.split(",").toList).filter(list => list.size > 2).map(list => list(2).trim).map(state => (state, 1)) // line2 is the zone
-
-    val stats = stateStats.reduceByKey(_ + _).sortBy(t => t._2)
-    stats.cache()
-
-    println("\n\nEntries per zone: ")
-    println(stats.count())
-    stats.collect().foreach(t => println(t._1 + ": " +t._2))
+    val peugeots = data.filter(line => line.contains("PEUGEOT"))
 
 
+    println("\n\nCount Peugoet: " + peugeots.count)
+
+    def getOneColumnValue(rdd: RDD[String]): RDD[Double] = {
+      rdd.map(line => line.split("\t"))
+        .map(row => Try(row(21).toDouble))
+        .filter(option => option.isSuccess)
+        .map(option => option.get)
+        .cache
+    }
+
+    val colAllData = getOneColumnValue(data)
+    val colPeugoets = getOneColumnValue(peugeots)
+
+    println("\n\nAverage Peugoet: " + (colPeugoets.sum / colPeugoets.count))
+    println("\n\nAverage Total: " + (colAllData.sum / colAllData.count))
 
   }
 }

@@ -57,6 +57,7 @@ object StreamingKafkaTwoTopics {
     val sc = new SparkContext(conf)
 
     sc.setCheckpointDir("hdfs://" + HDFS_NAMENODE + "/checkpointdir")
+    val kafkaBrokers = sc.getConf.getOption("spark.sparksandbox.kafka_brokers").getOrElse("localhost:9092")
 
     sc.setLogLevel("WARN")
 
