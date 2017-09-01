@@ -1,0 +1,122 @@
+version: '3.0'
+
+services:
+  master:
+    image: gettyimages/spark:2.1.0-hadoop-2.7
+    command: bin/spark-class org.apache.spark.deploy.master.Master -h cluster-spark-master
+    hostname: cluster-spark-master
+    container_name: cluster-spark-master
+    environment:
+      MASTER: spark://cluster-spark-master:7077
+      SPARK_CONF_DIR: /conf
+      SPARK_PUBLIC_DNS: localhost
+    ports:
+      - 4040:4040
+      - 6066:6066
+      - 7077:7077
+      - 8888:8080
+    volumes:
+      - ./spark/conf/master:/conf
+
+  worker1:
+    image: gettyimages/spark:2.1.0-hadoop-2.7
+    command: bin/spark-class org.apache.spark.deploy.worker.Worker spark://cluster-spark-master:7077
+    hostname: cluster-spark-worker1
+    container_name: cluster-spark-worker1
+    environment:
+      SPARK_CONF_DIR: /conf
+      SPARK_WORKER_CORES: 1
+      SPARK_WORKER_MEMORY: 1g
+      SPARK_WORKER_PORT: 8881
+      SPARK_WORKER_WEBUI_PORT: 8081
+      SPARK_PUBLIC_DNS: localhost
+    links:
+      - master
+    ports:
+      - 8081:8081
+    volumes:
+      - ./spark/conf/worker:/conf
+
+  worker2:
+    image: gettyimages/spark:2.1.0-hadoop-2.7
+    command: bin/spark-class org.apache.spark.deploy.worker.Worker spark://cluster-spark-master:7077
+    hostname: cluster-spark-worker2
+    container_name: cluster-spark-worker2
+    environment:
+      SPARK_CONF_DIR: /conf
+      SPARK_WORKER_CORES: 1
+      SPARK_WORKER_MEMORY: 1g
+      SPARK_WORKER_PORT: 8882
+      SPARK_WORKER_WEBUI_PORT: 8082
+      SPARK_PUBLIC_DNS: localhost
+    links:
+      - master
+    ports:
+      - 8082:8082
+    volumes:
+      - ./spark/conf/worker:/conf
+
+  hdfs-namenode:
+    image: bde2020/hadoop-namenode:1.1.0-hadoop2.7.1-java8
+    hostname: cluster-hdfs-namenode
+    container_name: cluster-hdfs-namenode
+    environment:
+      - CLUSTER_NAME=cluster
+    env_file:
+      - ./hadoop/hadoop.env
+    volumes:
+    - /home/jehan/ressources/sample_datasets:/external_data
+
+  hdfs-datanode1:
+    image: bde2020/hadoop-datanode:1.1.0-hadoop2.7.1-java8
+    hostname: cluster-hdfs-datanode1
+    container_name: cluster-hdfs-datanode1
+    depends_on:
+      - hdfs-namenode
+    links:
+      - hdfs-namenode:namenode
+    env_file:
+      - ./hadoop/hadoop.env
+
+  hdfs-datanode2:
+    image: bde2020/hadoop-datanode:1.1.0-hadoop2.7.1-java8
+    hostname: cluster-hdfs-datanode2
+    container_name: cluster-hdfs-datanode2
+    depends_on:
+      - hdfs-namenode
+    links:
+      - hdfs-namenode:namenode
+    env_file:
+      - ./hadoop/hadoop.env
+
+  nodemanager1:
+    image: bde2020/hadoop-nodemanager:1.1.0-hadoop2.7.1-java8
+    container_name: cluster-hdfs-nodemanager
+    depends_on:
+      - hdfs-namenode
+      - hdfs-datanode1
+      - hdfs-datanode2
+    env_file:
+    - ./hadoop/hadoop.env
+
+  hdfs-resourcemanager:
+    image: bde2020/hadoop-resourcemanager:1.1.0-hadoop2.7.1-java8
+    container_name: cluster-hdfs-resourcemanager
+    depends_on:
+      - hdfs-namenode
+      - hdfs-datanode1
+      - hdfs-datanode2
+    env_file:
+    - ./hadoop/hadoop.env
+
+  kafka:
+    image: euranova/kafka
+    hostname: cluster-kafka
+    container_name: cluster-kafka
+    environment:
+      SERVICE_NAME: cluster-kafka
+      AUTO_CREATE_TOPICS_ENABLE: "true"
+      # IMPORTANT : THIS MIGHT BE NEEDED - YMMV
+      #ADVERTISED_LISTENERS: "cluster-kafka:9092"
+      #ADVERTISED_LISTENERS: "172.19.0.3:9092"
+
