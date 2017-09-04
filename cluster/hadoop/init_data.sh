@@ -25,7 +25,7 @@ done
 echo "Connected."
 
 echo "Give all apps write permission to HDFS (don't use in production !)."
-docker exec -i ${NAMENODE} hdfs dfs -chmod 777 /
+docker exec -i ${NAMENODE} hdfs dfs -chmod 777 / || exit 1
 
 docker exec -i ${NAMENODE} hdfs dfs -ls /${DATASET_FILE}
 if [ $? == 0 ]; then
@@ -50,6 +50,8 @@ else
     -v$ROOT:/data \
     --entrypoint=bash \
     ${NAMENODE_SERVICE} \
-    hdfs dfs -fs "hdfs://${NAMENODE_SERVICE}/" -put /data/${DATASET_FILE} /
+    hdfs dfs -fs "hdfs://${NAMENODE_SERVICE}/" -put /data/${DATASET_FILE} / || exit 1
 fi
 
+
+exit 0

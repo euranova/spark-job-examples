@@ -1,44 +1,19 @@
 package sparksandbox
 
-import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.sql.{ForeachWriter, SparkSession}
-import org.apache.spark.streaming.{Minutes, Seconds, StreamingContext}
+import org.apache.spark.streaming.{Minutes, Seconds}
 import org.joda.time.DateTime
-import org.joda.time.format.DateTimeFormat
+import sparksandbox.configure.JobConfigure
 
 
 object StreamingSimpleRDD {
 
-  val SPARK_MASTER = "spark://172.20.0.3:7077"
-  val HDFS_NAMENODE = "172.20.0.2:8020"
-
   def main(args: Array[String]) {
 
-    val conf = new SparkConf()
-    conf
-      //.setMaster(SPARK_MASTER)
-      .setMaster("local[2]")
-      .setAppName("UnStructuredStreaming")
-      //.setJars(List("build/libs/spark-cluster-sandbox-1.0-SNAPSHOT.jar").toArray)
+    val ssc = JobConfigure.StreamingContextHDFS(this, Seconds(1))
 
-    val sc = new SparkContext(conf)
+    // requires opening a socket: nc -lk 9999
+    val lines = ssc.socketTextStream(JobConfigure.getInputSocket(ssc.sparkContext), 9999)
 
-    sc.setCheckpointDir("hdfs://" + HDFS_NAMENODE + "/checkpointdir")
-
-    sc.setLogLevel("WARN")
-
-    //conf.set("fs.hdfs.impl", classOf[org.apache.hadoop.hdfs.DistributedFileSystem].getName)
-
-    val ssc = new StreamingContext(sc, Seconds(1))
-    ssc.checkpoint("hdfs://" + HDFS_NAMENODE + "/sparkstreamingcheckpoint")
-
-    val lines = ssc.socketTextStream("localhost", 9999)
-
-/*    lines
-      .foreachRDD(rdd => {
-        println(DateTime.now().toString + " Raw ")
-        rdd
-      })*/
 
     lines.map(row => row.splitAt(15)).reduceByKeyAndWindow((a: String, b: String) => {
       b

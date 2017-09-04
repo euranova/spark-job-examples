@@ -7,71 +7,35 @@ import org.apache.kafka.common.serialization.StringDeserializer
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.kafka010._
-import org.apache.spark.{SparkConf, SparkContext}
+import sparksandbox.configure.JobConfigure
 
 
 object StreamingKafkaTwoTopics {
-/*  val KAFKA_BROKERS = "172.19.0.3:9092"
-  val HDFS_NAMENODE = "172.19.0.4:8020"
-  val SPARK_MASTER = "spark://172.19.0.2:7077"*/
 
-  val KAFKA_BROKERS = "cluster-kafka:9092"
-  val HDFS_NAMENODE = "cluster-hdfs-namenode:8020"
-  val SPARK_MASTER = "spark://cluster-spark-master:7077"
-  //val SPARK_MASTER = "yarn://cluster-hdfs-resourcemanager"
-  val checkpointInterval = Seconds(5 * 3) // 40 seconds
-
-  def createKafkaStream(ssc: StreamingContext, kafkaTopics: String, brokers: String, randomId: Boolean): DStream[ConsumerRecord[String, String]] = {
-    val topicsSet = kafkaTopics.split(",").toSet
-    val kafkaParams = Map[String, String](
-      //      "metadata.broker.list" -> brokers,
-      "bootstrap.servers" -> brokers,
-      "value.deserializer" -> classOf[StringDeserializer].getCanonicalName,
-      "key.deserializer" -> classOf[StringDeserializer].getCanonicalName,
-      "auto.offset.reset" -> "earliest",
-      "group.id" -> ("ploup" + (if (randomId) UUID.randomUUID().toString else ""))
-    )
-
-    KafkaUtils.createDirectStream[String, String](ssc,
-      LocationStrategies.PreferConsistent,
-      ConsumerStrategies.Subscribe[String, String](topicsSet, kafkaParams))
-  }
-
-  // Main inspiration : https://docs.cloud.databricks.com/docs/latest/databricks_guide/07%20Spark%20Streaming/14%20Joining%20DStreams%20With%20Static%20Datasets.html
-
+  val batchIntervalSeconds = 5
+  val batchInterval = Seconds(batchIntervalSeconds)
+  val checkpointInterval = Seconds(batchIntervalSeconds * 3)
 
   def main(args: Array[String]) {
-    // Should be some file on your system
-    val conf = new SparkConf()
 
-/*      .set("es.nodes.discovery", "false")
-      .set("es.nodes.wan.only", "true")
-      .set("es.nodes", "127.0.0.1")*/
-      .setAppName("Simple Application")
-      //      .setMaster("local[2]")
-      .setMaster(SPARK_MASTER)
-      .setJars(List(
-        "target/spark-sandbox-1.0-SNAPSHOT.jar"
-        //"target/original-spark-sandbox-1.0-SNAPSHOT.jar"
-      ).toArray)
-    val sc = new SparkContext(conf)
+    val ssc = JobConfigure.StreamingContextHDFS(this, batchInterval)
+    val sc = ssc.sparkContext
 
-    sc.setCheckpointDir("hdfs://" + HDFS_NAMENODE + "/checkpointdir")
-    val kafkaBrokers = sc.getConf.getOption("spark.sparksandbox.kafka_brokers").getOrElse("localhost:9092")
+    val kafkaBrokers = JobConfigure.getKafkaBrokers(sc)
 
-    sc.setLogLevel("WARN")
+    // incoming message. Key is the sender's trigram
+    val messagesStream = createKafkaStream(ssc, "messages", kafkaBrokers, randomId = false)
+                          .map(e => (e.key, (e.value, new Date())))
+    messagesStream.checkpoint(checkpointInterval)
 
-    //conf.set("fs.hdfs.impl", classOf[org.apache.hadoop.hdfs.DistributedFileSystem].getName)
+    // key = trigram, value = name
+    // should be a compacted topic
+    // use random groupId to ensure we always read from the start
+    val trigramsStream = createKafkaStream(ssc, "trigrams", kafkaBrokers, randomId = true)
+                          .map(line => (line.key, line.value))
+    trigramsStream.checkpoint(checkpointInterval)
 
-    val ssc = new StreamingContext(sc, Seconds(5))
-    ssc.checkpoint("hdfs://" + HDFS_NAMENODE + "/sparkstreamingcheckpoint")
-
-    val stream = createKafkaStream(ssc, "messages", KAFKA_BROKERS, randomId = false)
-
-    val dataFromKafka = stream.map(e => (e.key, (e.value, new Date())))
-    dataFromKafka.checkpoint(checkpointInterval)
-
-    experimentMapWithState(sc, ssc, dataFromKafka)
+    resolveTrigramsForMessages(messagesStream, trigramsStream)
 
     ssc.remember(Minutes(1))
 
@@ -82,8 +46,7 @@ object StreamingKafkaTwoTopics {
 
   case class Message(date: Date, msg: String, name: String, uid: String)
 
-  def experimentMapWithState(sc: SparkContext, ssc: StreamingContext, firstStream: DStream[(String, (String, Date))]): Unit = {
-    val secondStream = createKafkaStream(ssc, "trigrams", KAFKA_BROKERS, randomId = true)
+  def resolveTrigramsForMessages(messagesStream: DStream[(String, (String, Date))], trigramsStream: DStream[(String, String)]): Unit = {
 
     def updateState(batchTime: Time, key: String, value: Option[String], state: State[String]): Option[(String, String)] = {
       val line = value.getOrElse("")
@@ -94,30 +57,43 @@ object StreamingKafkaTwoTopics {
 
     val stateSpec = StateSpec.function(updateState _)
 
-    val stateStream = secondStream
-      .map(line => (line.key, line.value))
-      .checkpoint(checkpointInterval)
-      .mapWithState(stateSpec)
+    val stateStream = trigramsStream.mapWithState(stateSpec)
 
     stateStream.print()
 
     val snapshots = stateStream.stateSnapshots()
 
-    firstStream.leftOuterJoin(snapshots)
+    messagesStream.leftOuterJoin(snapshots)
       .foreachRDD(rdd => {
-        println(">>> New messages")
         rdd.map(line => {
-            val uid = line._1
-            val name = line._2._2.getOrElse("? "+uid)
-            val date = line._2._1._2
-            val msg = line._2._1._1
-            Message(date, msg, name, uid)
+          val trigram = line._1
+          val messageBody = line._2._1
+          val senderInfo = line._2._2
+
+          Message(date = messageBody._2,
+                  msg = messageBody._1,
+                  name = senderInfo.getOrElse("? "+trigram ),
+                  uid = trigram)
           })
         .collect()
         .foreach(m => {
-          println(">>> " + m.name + ": " + m.msg + " \t [" + m.date + "]")
+          println("[" + m.date + "] " + m.name + ": " + m.msg)
         })
       })
   }
 
+  def createKafkaStream(ssc: StreamingContext, kafkaTopics: String, brokers: String, randomId: Boolean): DStream[ConsumerRecord[String, String]] = {
+    val topicsSet = kafkaTopics.split(",").toSet
+    val kafkaParams = Map[String, String](
+      "bootstrap.servers" -> brokers,
+      "value.deserializer" -> classOf[StringDeserializer].getCanonicalName,
+      "key.deserializer" -> classOf[StringDeserializer].getCanonicalName,
+      "auto.offset.reset" -> "earliest",
+      "group.id" -> ("Message reader" + (if (randomId) UUID.randomUUID().toString else ""))
+    )
+
+    KafkaUtils.createDirectStream[String, String](ssc,
+      LocationStrategies.PreferConsistent,
+      ConsumerStrategies.Subscribe[String, String](topicsSet, kafkaParams))
+  }
 }

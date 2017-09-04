@@ -115,8 +115,5 @@ services:
     container_name: cluster-kafka
     environment:
       SERVICE_NAME: cluster-kafka
-      AUTO_CREATE_TOPICS_ENABLE: "true"
-      # IMPORTANT : THIS MIGHT BE NEEDED - YMMV
-      #ADVERTISED_LISTENERS: "cluster-kafka:9092"
-      #ADVERTISED_LISTENERS: "172.19.0.3:9092"
+      AUTO_CREATE_TOPICS_ENABLE: "false"
 
