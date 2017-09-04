@@ -1,12 +1,9 @@
 package sparksandbox
 
-import java.util.{Date, UUID}
+import java.util.Date
 
-import org.apache.kafka.clients.consumer.ConsumerRecord
-import org.apache.kafka.common.serialization.StringDeserializer
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.dstream.DStream
-import org.apache.spark.streaming.kafka010._
 import sparksandbox.configure.JobConfigure
 
 
@@ -24,14 +21,14 @@ object StreamingKafkaTwoTopics {
     val kafkaBrokers = JobConfigure.getKafkaBrokers(sc)
 
     // incoming message. Key is the sender's trigram
-    val messagesStream = createKafkaStream(ssc, "messages", kafkaBrokers, randomId = false)
+    val messagesStream = JobConfigure.createKafkaStream(ssc, "messages", kafkaBrokers, randomId = false)
                           .map(e => (e.key, (e.value, new Date())))
     messagesStream.checkpoint(checkpointInterval)
 
     // key = trigram, value = name
     // should be a compacted topic
     // use random groupId to ensure we always read from the start
-    val trigramsStream = createKafkaStream(ssc, "trigrams", kafkaBrokers, randomId = true)
+    val trigramsStream = JobConfigure.createKafkaStream(ssc, "trigrams", kafkaBrokers, randomId = true)
                           .map(line => (line.key, line.value))
     trigramsStream.checkpoint(checkpointInterval)
 
@@ -82,18 +79,4 @@ object StreamingKafkaTwoTopics {
       })
   }
 
-  def createKafkaStream(ssc: StreamingContext, kafkaTopics: String, brokers: String, randomId: Boolean): DStream[ConsumerRecord[String, String]] = {
-    val topicsSet = kafkaTopics.split(",").toSet
-    val kafkaParams = Map[String, String](
-      "bootstrap.servers" -> brokers,
-      "value.deserializer" -> classOf[StringDeserializer].getCanonicalName,
-      "key.deserializer" -> classOf[StringDeserializer].getCanonicalName,
-      "auto.offset.reset" -> "earliest",
-      "group.id" -> ("Message reader" + (if (randomId) UUID.randomUUID().toString else ""))
-    )
-
-    KafkaUtils.createDirectStream[String, String](ssc,
-      LocationStrategies.PreferConsistent,
-      ConsumerStrategies.Subscribe[String, String](topicsSet, kafkaParams))
-  }
 }

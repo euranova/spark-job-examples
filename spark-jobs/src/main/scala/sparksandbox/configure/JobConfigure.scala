@@ -1,5 +1,11 @@
 package sparksandbox.configure
 
+import java.util.UUID
+
+import org.apache.kafka.clients.consumer.ConsumerRecord
+import org.apache.kafka.common.serialization.StringDeserializer
+import org.apache.spark.streaming.dstream.DStream
+import org.apache.spark.streaming.kafka010.{ConsumerStrategies, KafkaUtils, LocationStrategies}
 import org.apache.spark.streaming.{Duration, StreamingContext}
 import org.apache.spark.{SparkConf, SparkContext}
 
@@ -46,6 +52,22 @@ object JobConfigure {
 
   def getInputSocket(sc: SparkContext): String = {
     sc.getConf.getOption("spark.sparksandbox.input-socket").getOrElse("localhost")
+  }
+
+
+  def createKafkaStream(ssc: StreamingContext, kafkaTopics: String, brokers: String, randomId: Boolean): DStream[ConsumerRecord[String, String]] = {
+    val topicsSet = kafkaTopics.split(",").toSet
+    val kafkaParams = Map[String, String](
+      "bootstrap.servers" -> brokers,
+      "value.deserializer" -> classOf[StringDeserializer].getCanonicalName,
+      "key.deserializer" -> classOf[StringDeserializer].getCanonicalName,
+      "auto.offset.reset" -> "earliest",
+      "group.id" -> ("Message reader" + (if (randomId) UUID.randomUUID().toString else ""))
+    )
+
+    KafkaUtils.createDirectStream[String, String](ssc,
+      LocationStrategies.PreferConsistent,
+      ConsumerStrategies.Subscribe[String, String](topicsSet, kafkaParams))
   }
 
 }

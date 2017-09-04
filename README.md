@@ -46,14 +46,17 @@ Examples :
 
 ### StreamingSimpleRDD
 
-First open a socket you can write to :
+First open a Kafka producer you can write to :
+
+```bash
+./cluster/kafka/producer.sh words
 ```
-nc -lk 9999
-```
+
+Run the job and start typing text with words.
 
 ### StreamingKafkaTwoTopics
 
-First open two kafka producers to write data to :
+First open two kafka producers to write data to (then, run the job).
 
 #### Trigrams
 
@@ -62,7 +65,7 @@ to the names of users will be streamed directly and used immediatly
 in new messages.
 
 ```bash
-./cluster/kafka/producer.sh trigrams
+./cluster/kafka/producer.sh trigrams with_key
 ```
 
 The expected input format is `trigram:username`. Example:
@@ -76,7 +79,7 @@ DRE:Douglas Reynholm
 #### Messages
 
 ```bash
-./cluster/kafka/producer.sh messages
+./cluster/kafka/producer.sh messages with_key
 ```
 
 The expected input format is `trigram:message`. Example:
@@ -95,3 +98,4 @@ RTR: I don't want to be rude or anything but I wasn't informed of any changes to
 JBA: Oh did they not tell you about me?
 RTR: No, and we are perfectly fine down here thank you very much. We are more than capable of taking care of ourselves.
 ```
+
