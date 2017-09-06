@@ -46,11 +46,8 @@ dependencies {
     compile group: "org.apache.spark", name: "spark-sql_${scalaVersion}", version: sparkVersion
     compile group: "org.apache.spark", name: "spark-streaming_${scalaVersion}", version: sparkVersion
     compile group: "org.apache.spark", name: "spark-streaming-kafka-0-10_${scalaVersion}", version: sparkVersion
-    //compile group: "org.apache.spark", name: "spark-sql-kafka-0-10_${scalaVersion}", version: sparkVersion
-    //compile group: "com.databricks",   name: "spark-avro_${scalaVersion}", version: "3.2.0"
 
     // misc
-    //compile group: "org.apache.avro", name: "avro", version: "1.8.0"
     compile group: "org.apache.flume", name: "flume-ng-core", version: "1.7.0"
     compile group: "joda-time", name: "joda-time", version:"2.9.9"
 }

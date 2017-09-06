@@ -11,7 +11,7 @@
 ## 2) Open UIs
 
 * Spark master: http://localhost:8888/
-* HDFS UI: http://[NAMENODE IP]:8888/
+* HDFS UI: http://[NAMENODE IP]:50070/
 
 
 ## 3) Run jobs

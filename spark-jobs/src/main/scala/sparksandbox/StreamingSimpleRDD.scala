@@ -10,7 +10,8 @@ object StreamingSimpleRDD {
 
     val ssc = JobConfigure.StreamingContextHDFS(this, Seconds(1))
 
-    val lines = JobConfigure.createKafkaStream(ssc, "words", JobConfigure.getKafkaBrokers(ssc.sparkContext), randomId = false)
+    val lines = JobConfigure.createKafkaStream(ssc, "words",
+                  JobConfigure.getKafkaBrokers(ssc.sparkContext), randomId = false)
                   .map(e => e.value)
 
     lines.map(row => row.split(" ").toList)

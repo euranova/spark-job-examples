@@ -14,7 +14,6 @@ object JobConfigure {
   def SimpleBatchContext(main: Object): SparkContext = {
     val conf = new SparkConf()
       .setAppName(main.getClass.getSimpleName)
-      .setMaster("local")
 
     val sc = new SparkContext(conf)
     sc.setLogLevel(sc.getConf.getOption("spark.sparksandbox.log_level").getOrElse("WARN"))
